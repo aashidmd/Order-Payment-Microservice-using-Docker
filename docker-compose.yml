@@ -111,6 +111,6 @@ services:
     networks:
       - order-payment-network
   
-# Network is for communication between containers
+# Network 
 networks:
   order-payment-network:
