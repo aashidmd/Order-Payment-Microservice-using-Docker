@@ -1,0 +1,116 @@
+version: '3.9'
+services:
+
+  rabbitmq:
+    image: rabbitmq:3.9.14-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+    networks:
+      - order-payment-network
+
+
+  zipkin-server:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    environment:
+      STORAGE_TYPE: mem
+      RABBIT_URI: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - "9411:9411"
+    restart: always
+    depends_on:
+      - rabbitmq
+    networks:
+      - order-payment-network    
+
+
+  EUREKA-SERVER:
+    image: micro/service-registry:0.0.1-SNAPSHOT
+    build:
+      context: netflix-eureka-naming-server
+      dockerfile: Dockerfile
+    ports:
+      - "8761:8761"
+    restart: always
+    networks:
+      - order-payment-network
+
+  
+
+  GATEWAY-SERVICE:
+    image: micro/cloud-gateway:0.0.1-SNAPSHOT
+    build:
+      context: cloud-gateway
+      dockerfile: Dockerfile
+    environment:
+      RABBIT_URI: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - "8989:8989"
+    restart: always
+    depends_on:
+      - EUREKA-SERVER
+      - rabbitmq
+      - zipkin-server
+    networks:
+      - order-payment-network
+
+
+  HYSTRIX-DASHBOARD:
+    image: micro/hystrix-dashboard:0.0.1-SNAPSHOT
+    build:
+      context: hystrix-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "9195:9195"
+    restart: always
+    depends_on:
+      - EUREKA-SERVER
+      - ORDER-SERVICE
+      - PAYMENT-SERVICE
+    networks:
+      - order-payment-network    
+
+
+  PAYMENT-SERVICE:
+    image: micro/payment-service:0.0.1-SNAPSHOT
+    build:
+      context: payment-service
+      dockerfile: Dockerfile    
+    environment:
+      RABBIT_URI: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - "9191:9191"
+    restart: always
+    depends_on:
+      - EUREKA-SERVER
+      - GATEWAY-SERVICE
+      - rabbitmq
+      - zipkin-server
+    networks:
+      - order-payment-network
+
+
+  ORDER-SERVICE:
+    image: micro/order-service:0.0.1-SNAPSHOT
+    build:
+      context: order-service
+      dockerfile: Dockerfile    
+    ports:
+      - "9192:9192"
+    restart: always
+    environment:
+      RABBIT_URI: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      - PAYMENT-SERVICE
+      - EUREKA-SERVER
+      - GATEWAY-SERVICE
+      - rabbitmq
+      - zipkin-server
+    networks:
+      - order-payment-network
+  
+# Network is for communication between containers
+networks:
+  order-payment-network:
